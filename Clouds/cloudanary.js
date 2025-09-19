@@ -54,12 +54,45 @@ async function Cloudinary_Upload(filepath, socket, CompletedUploads, sessionId, 
             provider: 'cloudinary',
         };
     } catch (error) {
-        return { message: 'SOmthing went wrong try again!' }
+        throw error
     }
 }
 
-async function Cloudanary_Read() {
-    
+async function Cloudanary_Read(public_id, extention) {
+    try {
+        function getSignedUrl(public_id, resource_type = "auto", extention) {
+            return cloudinary.v2.url(`${public_id}.${extention}`, {
+                type: "authenticated",
+                resource_type: resource_type,
+                sign_url: true,
+                secure: true,
+                expires_at: Math.floor(Date.now() / 1000) + 3600
+            });
+        }
+        const signedUrl = getSignedUrl(public_id, 'video', extention);
+        return signedUrl
+
+    } catch (error) {
+        console.error(error);
+        throw error
+    }
 }
 
-export default Cloudinary_Upload
+async function Cloudanary_Delete(public_id) {
+    try {
+        const result = await cloudinary.v2.uploader.destroy(public_id, {
+            type: 'authenticated',
+            resource_type: 'video'
+        })
+        console.log(result)
+        return result
+    } catch (error) {
+        throw error
+    }
+}
+
+export {
+    Cloudinary_Upload,
+    Cloudanary_Read,
+    Cloudanary_Delete
+}

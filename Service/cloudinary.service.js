@@ -1,4 +1,4 @@
-import Cloudinary_Upload from '../Clouds/cloudanary.js'
+import { Cloudinary_Upload, Cloudanary_Read, Cloudanary_Delete } from '../Clouds/cloudanary.js'
 import cloudinary from 'cloudinary'
 import dotenv from 'dotenv'
 dotenv.config()
@@ -24,6 +24,24 @@ class Cloudanary {
             return response;
         } catch (error) {
             throw error;
+        }
+    }
+
+    async ReadFile(public_id, extention) {
+        try {
+            const responce = await Cloudanary_Read(public_id, extention)
+            return responce
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async DeleteFile(public_id) {
+        try {
+            const responce = Cloudanary_Delete(public_id)
+            return responce
+        } catch (error) {
+            throw error
         }
     }
 }

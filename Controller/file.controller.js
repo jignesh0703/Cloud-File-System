@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import MergeChunks from '../Utils/merge_chunk.js';
 import CompressFile from '../Utils/compressfile.js';
-// import Cloudanary from '../Service/cloudanary.service.js'
+// import Cloudanary from '../Service/cloudinary.service.js'
 
 const ALLOWED_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'avi'];
 const MAX_FILE_SIZE = 1024 * 1024 * 500
@@ -152,12 +152,51 @@ const FileUploadController = async (req, res) => {
 
 const ReadFile = async (req, res) => {
     try {
-        const provider = req.body.provider
-        console.log(provider)
 
-        if (provider === 'cloudinary') {
-            return Cloudanary.ReadFile(req, res)
+        const provider = req.body.provider || process.env.CLOUD_PROVIDER
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
+
+        const extention = req.body.extention
+        const public_id = req.body.public_id
+        if (!public_id) {
+            return res.status(400).json({ message: 'Public id id required!' })
         }
+
+        const responce = await service.ReadFile(public_id, extention)
+
+        return res.status(200).json({
+            message: 'File Fetch Succesfully!',
+            data: {
+                sign_url: responce
+            }
+        })
+
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({ message: 'Something went wrong, try again!' })
+    }
+}
+
+const DeleteFile = async (req, res) => {
+    try {
+        const provider = req.body.provider || process.env.CLOUD_PROVIDER
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
+
+        const public_id = req.body.public_id
+        if (!public_id) {
+            return res.status(400).json({ message: 'Public id id required!' })
+        }
+
+        const responce = await service.DeleteFile(public_id)
+        console.log(responce)
+        return res.status(200).json({
+            message: 'File Delete Succesfully!',
+            data: {
+                responce
+            }
+        })
 
     } catch (error) {
         console.log(error)
@@ -167,5 +206,6 @@ const ReadFile = async (req, res) => {
 
 export {
     FileUploadController,
-    ReadFile
+    ReadFile,
+    DeleteFile
 }
