@@ -126,7 +126,7 @@
           formData.append("totalFiles", totalFiles);
           formData.append("filesize", file.size);
           formData.append("socketId", socket.id);
-          formData.append("provider", "cloudinary")
+          formData.append("provider", "aws")
 
           try {
             const res = await fetch("http://localhost:5000/api/file/upload", {

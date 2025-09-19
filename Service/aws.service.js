@@ -1,23 +1,37 @@
-// class S3{
-//     constructor(credentials){
-//         this.cloudinary = cloudinary.v2.config({
-//              cloud_name: credentials?.cloudinaryName || process.env.CLOUDINARY_NAME,
-//              api_key: credentials?.cloudinaryKey || process.env.CLOUDINARY_KEY,
-//              api_secret: credentials?.cloudinarySecret || process.env.CLOUDINARY_SECRET
-//          });
-//     }
+import { Delete_AWS, initS3, Read_Aws, UploadToAWS } from '../Clouds/aws.js';
 
-//     async fileUpload(buffer) {
-//          try {
-//             const response = this.cloudinary.fileUpload(buffer);
-//             return response;
-//          } catch (error) {
-//             throw error;
-//          }
-//     }
-// }
+class AWSService {
+    constructor(credentials) {
+        this.s3 = initS3(credentials)
+        this.bucket = credentials?.bucket || process.env.AWS_BUCKET
+    }
 
-// module.exports = {
-//     s3: new S3(credentials),
-//     sqs: 
-// }
+    async fileUpload(filepath, socket, CompletedUploads, sessionId, TotalFile) {
+        try {
+            const responce = await UploadToAWS(filepath, socket, CompletedUploads, sessionId, TotalFile, this.bucket)
+            return responce
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async ReadFile(public_id, extention) {
+        try {
+            const responce = await Read_Aws(public_id, extention, this.bucket)
+            return responce
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async DeleteFile(public_id) {
+        try {
+            const response = await Delete_AWS(public_id, this.bucket)
+            return response
+        } catch (error) {
+            throw error
+        }
+    }
+}
+
+export default new AWSService()

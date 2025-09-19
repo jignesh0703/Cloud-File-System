@@ -10,10 +10,12 @@ let CompletedUploads = {}
 
 const FileUploadController = async (req, res) => {
     try {
-
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
+        console.log('provider :', provider)
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
         const service = ProviderService
+
+        console.log('service :', service)
 
         const socket = req.app.get('io')
         if (!req.files || req.files.length === 0) {
@@ -152,7 +154,6 @@ const FileUploadController = async (req, res) => {
 
 const ReadFile = async (req, res) => {
     try {
-
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
         const service = ProviderService
@@ -164,7 +165,6 @@ const ReadFile = async (req, res) => {
         }
 
         const responce = await service.ReadFile(public_id, extention)
-
         return res.status(200).json({
             message: 'File Fetch Succesfully!',
             data: {
@@ -190,7 +190,6 @@ const DeleteFile = async (req, res) => {
         }
 
         const responce = await service.DeleteFile(public_id)
-        console.log(responce)
         return res.status(200).json({
             message: 'File Delete Succesfully!',
             data: {

@@ -84,7 +84,6 @@ async function Cloudanary_Delete(public_id) {
             type: 'authenticated',
             resource_type: 'video'
         })
-        console.log(result)
         return result
     } catch (error) {
         throw error
