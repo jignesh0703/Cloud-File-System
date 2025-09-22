@@ -1,7 +1,8 @@
 import cloudinary from 'cloudinary';
 
-async function Cloudinary_Upload(filepath, socket, CompletedUploads, sessionId, TotalFile) {
+async function Cloudinary_Upload(filepath, socket, CompletedUploads, sessionId, TotalFile, emitter) {
     try {
+        emitter.emit('file-upload-start', { provider: 'cloudinary' })
         if (socket) socket.emit('cloud-upload-progress', {
             percent: 60,
             currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
@@ -20,6 +21,7 @@ async function Cloudinary_Upload(filepath, socket, CompletedUploads, sessionId, 
                     currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                     TotalFile
                 });
+                emitter.emit('file-uploading-cloud-track', { percent: fakePercent.toFixed(2) })
             }, 500);
         }
 
@@ -39,11 +41,13 @@ async function Cloudinary_Upload(filepath, socket, CompletedUploads, sessionId, 
             expires_at: Math.floor(Date.now() / 1000) + 3600 // 1h
         });
 
+        emitter.emit('upload-complete-end', { provider: 'cloudinary' })
         if (socket) socket.emit('cloud-upload-progress', {
             percent: 100,
             currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
             TotalFile: TotalFile
         });
+
 
         return {
             extention: result.format,

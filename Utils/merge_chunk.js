@@ -1,11 +1,12 @@
 import fs from 'fs'
 import path from 'path'
 
-function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, sessionId, TotalFiles) {
+function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, sessionId, TotalFiles, emitter) {
     return new Promise((resolve, reject) => {
         const writeStream = fs.createWriteStream(finalpath);
 
         let mergedChunksPer = 0
+        emitter.emit('file-merge-start')
 
         for (let i = 0; i < totalchunk; i++) {
             const chunkFile = path.join(TempDir, `chunk_${i}`);
@@ -18,14 +19,13 @@ function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, s
             const endPercent = 50;   // merge contributes up to 50%
 
             const mergePercent = (startPercent + ((mergedChunksPer / totalchunk) * (endPercent - startPercent))).toFixed(2);
-            console.log(`Merge percent: ${mergePercent}%`);
+            emitter.emit('file-merge-track', { mergePercent })
 
             if (socket) socket.emit('merge-process', {
                 mergePercent,
                 currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                 TotalFile: TotalFiles
             })
-
         }
 
         writeStream.end();
@@ -36,6 +36,7 @@ function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, s
                 message: 'Merging Completed!',
                 TotalFile: TotalFiles
             })
+            emitter.emit('file-merge-end')
             resolve();
         });
 

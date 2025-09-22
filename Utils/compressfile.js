@@ -5,9 +5,10 @@ import path from 'path'
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sessionId) {
+async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sessionId, emitter) {
     const ext = path.extname(filepath).slice(1).toLowerCase()
     const outputPath = filepath.replace(/(\.\w+)$/, '_compressed$1');
+    emitter.emit('file-compress-start')
 
     if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
         await sharp(filepath)
@@ -36,6 +37,7 @@ async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sess
                 ])
                 .save(outputPath)
                 .on('end', () => {
+                    emitter.emit('file-compress-end')
                     if (socket && CompletedUploads[sessionId]) {
                         socket.emit('compress-process', {
                             percent: 60,
@@ -48,7 +50,6 @@ async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sess
                 .on('error', reject);
         });
     }
-
     return filepath;
 }
 

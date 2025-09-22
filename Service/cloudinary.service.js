@@ -12,14 +12,15 @@ class Cloudanary {
         });
     }
 
-    async fileUpload(filepath, socket, CompletedUploads, sessionId, TotalFile) {
+    async fileUpload(filepath, socket, CompletedUploads, sessionId, TotalFile, emitter) {
         try {
             const response = await Cloudinary_Upload(
                 filepath,
                 socket,
                 CompletedUploads,
                 sessionId,
-                TotalFile
+                TotalFile,
+                emitter
             );
             return response;
         } catch (error) {

@@ -1,4 +1,4 @@
-import { Delete_AWS, initS3, Read_Aws, UploadToAWS } from '../Clouds/aws.js';
+import { Delete_AWS, FetchAllDeletedFile, initS3, Read_Aws, UploadToAWS, RestoreDeletedFile } from '../Clouds/aws.js';
 
 class AWSService {
     constructor(credentials) {
@@ -28,6 +28,24 @@ class AWSService {
         try {
             const response = await Delete_AWS(public_id, this.bucket)
             return response
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async FetchAllDeletedFiles() {
+        try {
+            const responce = await FetchAllDeletedFile(this.bucket)
+            return responce
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async RestoreDeleteFile(public_id, versionid) {
+        try {
+            const responce = await RestoreDeletedFile(this.bucket, public_id, versionid)
+            return responce
         } catch (error) {
             throw error
         }

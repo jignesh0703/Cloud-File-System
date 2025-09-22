@@ -1,7 +1,9 @@
-import fs from 'fs'
+import fs, { write } from 'fs'
 import path from 'path'
 import MergeChunks from '../Utils/merge_chunk.js';
 import CompressFile from '../Utils/compressfile.js';
+import axios from 'axios';
+import emitter from '../Emitter/emiiter.js';
 // import Cloudanary from '../Service/cloudinary.service.js'
 
 const ALLOWED_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'avi'];
@@ -11,21 +13,11 @@ let CompletedUploads = {}
 const FileUploadController = async (req, res) => {
     try {
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
-        console.log('provider :', provider)
+        const totalFiles = parseInt(req.body.totalFiles) || 1;
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
         const service = ProviderService
 
-        console.log('service :', service)
-
-        const socket = req.app.get('io')
-        if (!req.files || req.files.length === 0) {
-            return res.status(400).json({ message: 'File is Required!' })
-        }
-
-        const filesize = req.body.filesize
-        if (filesize > MAX_FILE_SIZE) {
-            return res.status(400).json({ message: "Only 50MB files are allowded!" })
-        }
+        emitter.emit('start', { provider })
 
         const sessionId = req.body.sessionId
         if (!CompletedUploads[sessionId]) {
@@ -34,6 +26,107 @@ const FileUploadController = async (req, res) => {
                 currentFileIndex: 0
             };
         }
+
+        const socket = req.app.get('io')
+
+        if (req.body.fileURL) {
+            console.log('Processing via URL...')
+
+            const fileUrl = req.body.fileURL
+            const headcheck = await axios.head(fileUrl)
+            const MAX_FILE_SIZE = 50 * 1024 * 1024;
+            const contentLength = parseInt(headcheck.headers['content-length'], 10)
+            if (contentLength && contentLength > MAX_FILE_SIZE) {
+                return res.status(400).json({ message: 'File size exceeds 50MB limit' })
+            }
+
+            const filename = `file_${Date.now()}${path.extname(fileUrl).split('?')[0]}`
+            const filepath = path.join('upload', filename)
+            fs.mkdirSync(path.dirname(filepath), { recursive: true })
+
+            const socketProgress = () => {
+                socket?.emit('chunk-upload', {
+                    percent: 20,
+                    currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
+                    TotalFile: totalFiles
+                })
+            }
+
+            try {
+                emitter.emit('downloading-from-url')
+                const response = await axios.get(fileUrl, { responseType: 'stream' })
+                emitter.emit('downloading-from-url-done')
+                await new Promise((resolve, reject) => {
+                    const writer = fs.createWriteStream(filepath)
+                    response.data.pipe(writer)
+                    writer.on('finish', resolve)
+                    writer.on('error', reject)
+                })
+
+                socketProgress()
+
+                const compressedFile = await CompressFile(
+                    filepath,
+                    socket,
+                    totalFiles,
+                    CompletedUploads,
+                    sessionId,
+                    emitter
+                )
+
+                const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
+                    compressedFile,
+                    socket,
+                    CompletedUploads,
+                    sessionId,
+                    totalFiles,
+                    emitter
+                );
+
+                function FormatBytes(bytes, decimals = 2) {
+                    if (bytes === 0) return '0 Bytes'
+                    const k = 1024
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+                }
+
+                CompletedUploads[sessionId].files.push({
+                    filename,
+                    sign_url,
+                    extention,
+                    size: FormatBytes(size),
+                    public_id,
+                    expiry,
+                    provider
+                });
+
+                // clean up
+                fs.unlinkSync(filepath)
+                if (compressedFile !== filepath) fs.unlinkSync(compressedFile)
+
+                socket?.emit('all-files-complete', { sessionId, data: CompletedUploads[sessionId] })
+
+                return res.status(200).json({
+                    message: "File uploaded successfully from URL",
+                    data: CompletedUploads[sessionId]
+                })
+
+            } catch (err) {
+                emitter.emit('upload-error', { err })
+                return res.status(500).json({ message: "Failed to upload file from URL", error: err })
+            }
+        }
+
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ message: 'File is Required!' })
+        }
+
+        const filesize = req.body.filesize
+        if (filesize > MAX_FILE_SIZE) {
+            return res.status(400).json({ message: "Only 500MB files are allowded!" })
+        }
+
         for (const file of req.files) {
 
             CompletedUploads[sessionId].currentFileIndex = CompletedUploads[sessionId].files.length;
@@ -65,17 +158,15 @@ const FileUploadController = async (req, res) => {
 
             const percent = (((chunkindex + 1) / totalchunk) * 30).toFixed(2);
 
-            console.log(`✅ Stored chunk ${chunkindex + 1}/${totalchunk} (${percent}%)`);
-
+            emitter.emit('chunk-uplaod', { chunkindex, totalchunk, percent })
             socket.emit('chunk-upload', {
                 percent,
                 currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
-                TotalFile: parseInt(req.body.totalFiles)
+                TotalFile: totalFiles
             })
 
             const chunkFiles = fs.readdirSync(TempDir)
             if (chunkFiles.length === totalchunk) {
-                console.log("All chunks received, merging:", filename)
 
                 const uploadDir = path.join('upload')
                 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
@@ -88,23 +179,27 @@ const FileUploadController = async (req, res) => {
                     totalchunk,
                     TempDir,
                     CompletedUploads,
-                    sessionId, parseInt(req.body.totalFiles)
+                    sessionId,
+                    totalFiles,
+                    emitter
                 )
 
-                const CompressedFIle = await CompressFile(
+                const CompressedFile = await CompressFile(
                     finalpath,
                     socket,
-                    parseInt(req.body.totalFiles),
+                    totalFiles,
                     CompletedUploads,
-                    sessionId
+                    sessionId,
+                    emitter
                 )
 
                 const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
-                    CompressedFIle,
+                    CompressedFile,
                     socket,
                     CompletedUploads,
                     sessionId,
-                    parseInt(req.body.totalFiles)
+                    totalFiles,
+                    emitter
                 );
 
                 function FormatBytes(bytes, decimals = 2) {
@@ -126,18 +221,18 @@ const FileUploadController = async (req, res) => {
                 });
 
                 fs.unlinkSync(finalpath)
-                if (CompressedFIle !== finalpath) {
-                    fs.unlinkSync(CompressedFIle);
+                if (CompressedFile !== finalpath) {
+                    fs.unlinkSync(CompressedFile);
                 }
-                console.log(`File merged & uploaded: ${filename}`)
             }
         }
 
-        if (CompletedUploads[sessionId].files.length === parseInt(req.body.totalFiles, 10)) {
+        if (CompletedUploads[sessionId].files.length === totalFiles) {
             const result = CompletedUploads[sessionId]
             delete CompletedUploads[sessionId] // cleanup
 
             if (socket) socket.emit('all-files-complete', { sessionId, data: result });
+            emitter.emit('finish-upload')
             return res.status(200).json({
                 message: "All files uploaded successfully",
                 data: result
@@ -147,7 +242,7 @@ const FileUploadController = async (req, res) => {
         return res.status(200).json({ message: `Chunk uploaded` })
 
     } catch (err) {
-        console.error("❌ Upload error:", err)
+        emitter.emit('upload-error', { err })
         return res.status(500).json({ message: 'Something went wrong, try again!' })
     }
 }
@@ -165,6 +260,7 @@ const ReadFile = async (req, res) => {
         }
 
         const responce = await service.ReadFile(public_id, extention)
+        emitter.emit('fetch-file', { sign_url: responce })
         return res.status(200).json({
             message: 'File Fetch Succesfully!',
             data: {
@@ -173,7 +269,7 @@ const ReadFile = async (req, res) => {
         })
 
     } catch (error) {
-        console.log(error)
+        emitter.emit('upload-error', { err })
         return res.status(500).json({ message: 'Something went wrong, try again!' })
     }
 }
@@ -190,6 +286,7 @@ const DeleteFile = async (req, res) => {
         }
 
         const responce = await service.DeleteFile(public_id)
+        emitter.emit('delete-file')
         return res.status(200).json({
             message: 'File Delete Succesfully!',
             data: {
@@ -198,13 +295,59 @@ const DeleteFile = async (req, res) => {
         })
 
     } catch (error) {
-        console.log(error)
+        emitter.emit('upload-error', { err })
         return res.status(500).json({ message: 'Something went wrong, try again!' })
+    }
+}
+
+const FetchAllDeletedFileController = async (req, res) => {
+    try {
+        const provider = req.body.provider
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
+
+        const responce = await service.FetchAllDeletedFiles()
+        emitter.emit('fetch-deleted-file')
+        return res.status(200).json({
+            message: 'Deleted file fetch Succesfully!',
+            data: {
+                responce
+            }
+        })
+
+    } catch (error) {
+        emitter.emit('upload-error', { err })
+        return res.status(500).json({ message: 'Somthinkg went wrong, try again!' })
+    }
+}
+
+const RestoreDeletedFileController = async (req, res) => {
+    try {
+        const provider = req.body.provider
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
+
+        const { public_id, versionid } = req.body
+
+        const responce = await service.RestoreDeleteFile(public_id, versionid)
+        emitter.emit('restore-file')
+        return res.status(200).json({
+            message: 'Deleted File Restore Succesfully!',
+            data: {
+                responce
+            }
+        })
+
+    } catch (error) {
+        emitter.emit('upload-error', { err })
+        return res.status(500).json({ message: 'Somthinkg went wrong, try again!' })
     }
 }
 
 export {
     FileUploadController,
     ReadFile,
-    DeleteFile
+    DeleteFile,
+    FetchAllDeletedFileController,
+    RestoreDeletedFileController
 }

@@ -4,14 +4,12 @@ import FileRoutes from './Routes/File.Routes.js'
 import cors from 'cors'
 import { Server } from 'socket.io'
 import http from 'http'
-import cloudinary from 'cloudinary'
 dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT
 
 dotenv.config();
-
 
 const server = http.createServer(app);
 
