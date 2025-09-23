@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, sessionId, TotalFiles, emitter) {
+function MergeChunks(io, finalpath, totalchunk, TempDir, CompletedUploads, sessionId, TotalFiles, emitter, clientSocketId) {
     return new Promise((resolve, reject) => {
         const writeStream = fs.createWriteStream(finalpath);
 
@@ -21,7 +21,7 @@ function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, s
             const mergePercent = (startPercent + ((mergedChunksPer / totalchunk) * (endPercent - startPercent))).toFixed(2);
             emitter.emit('file-merge-track', { mergePercent })
 
-            if (socket) socket.emit('merge-process', {
+            if (io && clientSocketId) io.to(clientSocketId).emit('merge-process', {
                 mergePercent,
                 currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                 TotalFile: TotalFiles
@@ -31,7 +31,7 @@ function MergeChunks(socket, finalpath, totalchunk, TempDir, CompletedUploads, s
         writeStream.end();
         writeStream.on("finish", () => {
             fs.rmSync(TempDir, { recursive: true, force: true })
-            if (socket) socket.emit('merge-done', {
+            if (io && clientSocketId) io.to(clientSocketId).emit('merge-done', {
                 currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                 message: 'Merging Completed!',
                 TotalFile: TotalFiles

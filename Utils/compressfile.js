@@ -5,7 +5,7 @@ import path from 'path'
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sessionId, emitter) {
+async function CompressFile(filepath, io, totalFiles, CompletedUploads, sessionId, emitter, clientSocketId) {
     const ext = path.extname(filepath).slice(1).toLowerCase()
     const outputPath = filepath.replace(/(\.\w+)$/, '_compressed$1');
     emitter.emit('file-compress-start')
@@ -14,13 +14,21 @@ async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sess
         await sharp(filepath)
             .jpeg({ quality: 90 })
             .toFile(outputPath);
+        emitter.emit('file-compress-end')
+        if (io && clientSocketId && CompletedUploads[sessionId]) {
+            io.to(clientSocketId).emit('compress-process', {
+                percent: 60,
+                currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
+                TotalFile: totalFiles
+            });
+        }
         return outputPath;
     }
 
     if (['mp4', 'webm', 'avi'].includes(ext)) {
         return new Promise((resolve, reject) => {
-            if (socket && CompletedUploads[sessionId]) {
-                socket.emit('compress-process', {
+            if (io && clientSocketId && CompletedUploads[sessionId]) {
+                io.to(clientSocketId).emit('compress-process', {
                     percent: 54,
                     currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                     TotalFile: totalFiles
@@ -38,8 +46,8 @@ async function CompressFile(filepath, socket, totalFiles, CompletedUploads, sess
                 .save(outputPath)
                 .on('end', () => {
                     emitter.emit('file-compress-end')
-                    if (socket && CompletedUploads[sessionId]) {
-                        socket.emit('compress-process', {
+                    if (io && clientSocketId && CompletedUploads[sessionId]) {
+                        io.to(clientSocketId).emit('compress-process', {
                             percent: 60,
                             currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                             TotalFile: totalFiles

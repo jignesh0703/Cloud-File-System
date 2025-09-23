@@ -57,7 +57,6 @@
       console.log("✅ Connected to Socket.io server:", socket.id);
     });
 
-    // Update single progress bar
     function updateProgress(percent, stage, message) {
       const bar = document.getElementById("progressBar");
       bar.style.width = percent + "%";
@@ -67,7 +66,6 @@
 
     // Socket events
     socket.on("chunk-upload", (data) => {
-      console.log('DATATAAAAAA', data)
       updateProgress(data.percent, "Chunk Upload", `Uploading chunks... (File ${data.currentFileIndex + 1}/${data.TotalFile})`);
     });
 
@@ -80,21 +78,17 @@
     });
 
     socket.on('compress-process', (data) => {
-      console.log('COMPRESS :', data.percent)
-      updateProgress(data.percent, 'Compress', `Compressing file ${data.currentFileIndex + 1}/${data.TotalFile}`)
-    })
+      updateProgress(data.percent, 'Compress', `Compressing file ${data.currentFileIndex + 1}/${data.TotalFile}`);
+    });
 
     socket.on("cloud-upload-progress", (data) => {
-      console.log('CLOUDDDDD', data)
       updateProgress(data.percent, "Cloud Upload", `Uploading to cloud... (File ${data.currentFileIndex + 1}/${data.TotalFile})`);
     });
 
     socket.on("all-files-complete", ({ data }) => {
-      console.log("🎉 All files uploaded:", data);
       document.getElementById("log").innerHTML = `<p>🎉 All files uploaded successfully!</p>`;
     });
 
-    // Main uploader
     async function UploadFiles() {
       const input = document.getElementById("fileInput");
       if (!input.files.length) return alert("Select a file first");
@@ -111,6 +105,7 @@
       for (let f = 0; f < input.files.length; f++) {
         const file = input.files[f];
         const totalChunks = Math.ceil(file.size / chunkSize);
+        const fileId = sessionId + "-" + f; // unique file identifier
 
         for (let i = 0; i < totalChunks; i++) {
           const start = i * chunkSize;
@@ -120,13 +115,16 @@
           const formData = new FormData();
           formData.append("chunk", chunk);
           formData.append("filename", file.name);
+          formData.append("filetype", file.type);
+          formData.append("filesize", file.size);
+          formData.append("lastModified", file.lastModified);
           formData.append("chunkindex", i);
           formData.append("totalchunk", totalChunks);
           formData.append("sessionId", sessionId);
+          formData.append("fileId", fileId);
           formData.append("totalFiles", totalFiles);
-          formData.append("filesize", file.size);
           formData.append("socketId", socket.id);
-          formData.append("provider", "cloudinary")
+          formData.append("provider", "aws");
 
           try {
             const res = await fetch("http://localhost:5000/api/file/upload", {
@@ -134,7 +132,6 @@
               body: formData
             });
             const json = await res.json();
-            console.log("Response:", json);
 
             if (json.data && Array.isArray(json.data.files)) {
               allResponses.push(...json.data.files);

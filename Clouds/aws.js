@@ -1,5 +1,6 @@
 import AWS from 'aws-sdk'
 import fs from 'fs'
+import path from 'path'
 
 let s3
 
@@ -10,6 +11,7 @@ function initS3(credentials) {
         secretAccessKey: credentials?.SecretAccessKey || process.env.AWS_SECRETACCESSKEY,
         region: credentials?.Region || process.env.AWS_REGION
     });
+    console.log()
     return s3
 }
 
@@ -23,10 +25,15 @@ async function GetSign_url(filename, bucket, expiresIn = 3600) {
     return url
 }
 
-async function UploadToAWS(filepath, socket, CompletedUploads, sessionId, TotalFile, bucket) {
+async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, bucket, clientSocketId) {
     try {
+        if (io && clientSocketId) io.to(clientSocketId).emit('cloud-upload-progress', {
+            percent: 60,
+            currentFileIndex: CompletedUploads[sessionId]?.currentFileIndex,
+            TotalFile
+        });
         const fileContext = fs.readFileSync(filepath)
-        const filename = Date.now() + '-' + filepath.split('/').pop()
+        const filename = Date.now() + '-' + path.basename(filepath)
 
         const params = {
             Bucket: bucket,
@@ -35,9 +42,25 @@ async function UploadToAWS(filepath, socket, CompletedUploads, sessionId, TotalF
             ACL: 'private'
         }
 
-        await s3.upload(params).promise()
+        let fakePercent = 60;
+        let interval;
+        if (io && clientSocketId) {
+            interval = setInterval(() => {
+                fakePercent += Math.random() * 2;
+                if (fakePercent >= 95) fakePercent = 95;
+                io.to(clientSocketId).emit('cloud-upload-progress', {
+                    percent: fakePercent.toFixed(2),
+                    currentFileIndex: CompletedUploads[sessionId]?.currentFileIndex,
+                    TotalFile
+                });
+                emitter.emit('file-uploading-cloud-track', { percent: fakePercent.toFixed(2) })
+            }, 500);
+        }
 
-        if (socket) socket.emit('cloud-upload-progress', {
+        await s3.upload(params).promise()
+        if (interval) clearInterval(interval);
+
+        if (io && clientSocketId) io.to(clientSocketId).emit('cloud-upload-progress', {
             percent: 100,
             currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
             TotalFile: TotalFile

@@ -1,10 +1,9 @@
-import fs, { write } from 'fs'
+import fs from 'fs'
 import path from 'path'
 import MergeChunks from '../Utils/merge_chunk.js';
 import CompressFile from '../Utils/compressfile.js';
 import axios from 'axios';
 import emitter from '../Emitter/emiiter.js';
-// import Cloudanary from '../Service/cloudinary.service.js'
 
 const ALLOWED_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'avi'];
 const MAX_FILE_SIZE = 1024 * 1024 * 500
@@ -27,7 +26,8 @@ const FileUploadController = async (req, res) => {
             };
         }
 
-        const socket = req.app.get('io')
+        const io = req.app.get('io')
+        const clientSocketId = req.body.socketId;
 
         if (req.body.fileURL) {
             console.log('Processing via URL...')
@@ -45,7 +45,7 @@ const FileUploadController = async (req, res) => {
             fs.mkdirSync(path.dirname(filepath), { recursive: true })
 
             const socketProgress = () => {
-                socket?.emit('chunk-upload', {
+                io.to(clientSocketId)?.emit('chunk-upload', {
                     percent: 20,
                     currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
                     TotalFile: totalFiles
@@ -67,20 +67,22 @@ const FileUploadController = async (req, res) => {
 
                 const compressedFile = await CompressFile(
                     filepath,
-                    socket,
+                    io,
                     totalFiles,
                     CompletedUploads,
                     sessionId,
-                    emitter
+                    emitter,
+                    clientSocketId
                 )
 
                 const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
                     compressedFile,
-                    socket,
+                    io,
                     CompletedUploads,
                     sessionId,
                     totalFiles,
-                    emitter
+                    emitter,
+                    clientSocketId
                 );
 
                 function FormatBytes(bytes, decimals = 2) {
@@ -105,7 +107,9 @@ const FileUploadController = async (req, res) => {
                 fs.unlinkSync(filepath)
                 if (compressedFile !== filepath) fs.unlinkSync(compressedFile)
 
-                socket?.emit('all-files-complete', { sessionId, data: CompletedUploads[sessionId] })
+                if (clientSocketId) {
+                    io.to(clientSocketId)?.emit('all-files-complete', { sessionId, data: CompletedUploads[sessionId] })
+                }
 
                 return res.status(200).json({
                     message: "File uploaded successfully from URL",
@@ -140,10 +144,13 @@ const FileUploadController = async (req, res) => {
             }
 
             const filename = req.body.filename
+            const filesize = req.body.filesize
+            const lastModified = req.body.lastModified
             const chunkindex = parseInt(req.body.chunkindex, 10)
             const totalchunk = parseInt(req.body.totalchunk, 10)
 
-            const TempDir = path.join('temp', filename)
+            const TempDirName = `${filename}-${filesize}-${lastModified}`.replace(/[^a-zA-Z0-9-_\.]/g, '_');
+            const TempDir = path.join('temp', TempDirName)
             if (!fs.existsSync(TempDir)) fs.mkdirSync(TempDir, { recursive: true })
 
             const ChunkPath = path.join(TempDir, `chunk_${chunkindex}`)
@@ -159,11 +166,13 @@ const FileUploadController = async (req, res) => {
             const percent = (((chunkindex + 1) / totalchunk) * 30).toFixed(2);
 
             emitter.emit('chunk-uplaod', { chunkindex, totalchunk, percent })
-            socket.emit('chunk-upload', {
-                percent,
-                currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
-                TotalFile: totalFiles
-            })
+            if (clientSocketId) {
+                io.to(clientSocketId).emit('chunk-upload', {
+                    percent,
+                    currentFileIndex: CompletedUploads[sessionId].currentFileIndex,
+                    TotalFile: totalFiles
+                })
+            }
 
             const chunkFiles = fs.readdirSync(TempDir)
             if (chunkFiles.length === totalchunk) {
@@ -171,35 +180,38 @@ const FileUploadController = async (req, res) => {
                 const uploadDir = path.join('upload')
                 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
-                const finalpath = path.join(uploadDir, filename)
+                const finalpath = path.join(uploadDir, filename) /// add UUID or timestramp
 
                 await MergeChunks(
-                    socket,
+                    io,
                     finalpath,
                     totalchunk,
                     TempDir,
                     CompletedUploads,
                     sessionId,
                     totalFiles,
-                    emitter
+                    emitter,
+                    clientSocketId
                 )
 
                 const CompressedFile = await CompressFile(
                     finalpath,
-                    socket,
+                    io,
                     totalFiles,
                     CompletedUploads,
                     sessionId,
-                    emitter
+                    emitter,
+                    clientSocketId
                 )
 
                 const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
                     CompressedFile,
-                    socket,
+                    io,
                     CompletedUploads,
                     sessionId,
                     totalFiles,
-                    emitter
+                    emitter,
+                    clientSocketId
                 );
 
                 function FormatBytes(bytes, decimals = 2) {
@@ -220,7 +232,15 @@ const FileUploadController = async (req, res) => {
                     provider
                 });
 
-                fs.unlinkSync(finalpath)
+
+                // also update thus part 
+                try {
+                    if (fs.existsSync(finalpath)) {
+                        fs.unlinkSync(finalpath)
+                    }
+                } catch (err) {
+                    console.warn('Could not delete file (maybe busy):', finalpath)
+                }
                 if (CompressedFile !== finalpath) {
                     fs.unlinkSync(CompressedFile);
                 }
@@ -230,8 +250,9 @@ const FileUploadController = async (req, res) => {
         if (CompletedUploads[sessionId].files.length === totalFiles) {
             const result = CompletedUploads[sessionId]
             delete CompletedUploads[sessionId] // cleanup
-
-            if (socket) socket.emit('all-files-complete', { sessionId, data: result });
+            if (clientSocketId) {
+                io.to(clientSocketId).emit('all-files-complete', { sessionId, data: result });
+            }
             emitter.emit('finish-upload')
             return res.status(200).json({
                 message: "All files uploaded successfully",
@@ -302,7 +323,7 @@ const DeleteFile = async (req, res) => {
 
 const FetchAllDeletedFileController = async (req, res) => {
     try {
-        const provider = req.body.provider
+        const provider = req.body.provider || process.env.CLOUD_PROVIDER
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
         const service = ProviderService
 
@@ -316,7 +337,8 @@ const FetchAllDeletedFileController = async (req, res) => {
         })
 
     } catch (error) {
-        emitter.emit('upload-error', { err })
+        emitter.emit('upload-error', { error })
+        console.log(error)
         return res.status(500).json({ message: 'Somthinkg went wrong, try again!' })
     }
 }
@@ -338,7 +360,7 @@ const RestoreDeletedFileController = async (req, res) => {
             }
         })
 
-    } catch (error) {
+    } catch (err) {
         emitter.emit('upload-error', { err })
         return res.status(500).json({ message: 'Somthinkg went wrong, try again!' })
     }
