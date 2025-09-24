@@ -180,7 +180,7 @@ const FileUploadController = async (req, res) => {
                 const uploadDir = path.join('upload')
                 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
-                const finalpath = path.join(uploadDir, filename) /// add UUID or timestramp
+                const finalpath = path.join(uploadDir, `${Date.now()} - ${filename}`) /// add UUID or timestramp
 
                 await MergeChunks(
                     io,
