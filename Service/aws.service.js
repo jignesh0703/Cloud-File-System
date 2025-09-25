@@ -6,18 +6,18 @@ class AWSService {
         this.bucket = credentials?.bucket || process.env.AWS_BUCKET
     }
 
-    async fileUpload(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, clientSocketId) {
+    async fileUpload(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, clientSocketId, hash) {
         try {
-            const responce = await UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, this.bucket, clientSocketId)
+            const responce = await UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, this.bucket, clientSocketId, hash)
             return responce
         } catch (error) {
             throw error
         }
     }
 
-    async ReadFile(public_id, extention) {
+    async ReadFile(public_id, extention, password) {
         try {
-            const responce = await Read_Aws(public_id, extention, this.bucket)
+            const responce = await Read_Aws(public_id, extention, this.bucket, password)
             return responce
         } catch (error) {
             throw error

@@ -41,6 +41,8 @@
   <h1>Resumable Upload (Chunked)</h1>
 
   <input type="file" id="fileInput" multiple />
+  <label for="filePassword">File Password:</label>
+  <input type="password" id="filePassword" placeholder="Enter password" />
   <button onclick="UploadFiles()">Upload</button>
 
   <div id="progressContainer">
@@ -92,6 +94,8 @@
     async function UploadFiles() {
       const input = document.getElementById("fileInput");
       if (!input.files.length) return alert("Select a file first");
+      const password = document.getElementById("filePassword").value;
+
 
       document.getElementById("progressBar").style.width = "0%";
       document.getElementById("progressBar").textContent = "0%";
@@ -119,6 +123,7 @@
           formData.append("filesize", file.size);
           formData.append("lastModified", file.lastModified);
           formData.append("chunkindex", i);
+          formData.append("password", password);
           formData.append("totalchunk", totalChunks);
           formData.append("sessionId", sessionId);
           formData.append("fileId", fileId);

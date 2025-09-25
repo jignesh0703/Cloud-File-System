@@ -4,6 +4,7 @@ import MergeChunks from '../Utils/merge_chunk.js';
 import CompressFile from '../Utils/compressfile.js';
 import axios from 'axios';
 import emitter from '../Emitter/emiiter.js';
+import bcrypt from 'bcrypt'
 
 const ALLOWED_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'avi'];
 const MAX_FILE_SIZE = 1024 * 1024 * 500
@@ -15,6 +16,7 @@ const FileUploadController = async (req, res) => {
         const totalFiles = parseInt(req.body.totalFiles) || 1;
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
         const service = ProviderService
+        const password = req.body.password
 
         emitter.emit('start', { provider })
 
@@ -204,6 +206,8 @@ const FileUploadController = async (req, res) => {
                     clientSocketId
                 )
 
+                const hash = await bcrypt.hash(password, 10)
+
                 const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
                     CompressedFile,
                     io,
@@ -211,7 +215,8 @@ const FileUploadController = async (req, res) => {
                     sessionId,
                     totalFiles,
                     emitter,
-                    clientSocketId
+                    clientSocketId,
+                    hash
                 );
 
                 function FormatBytes(bytes, decimals = 2) {
@@ -231,7 +236,6 @@ const FileUploadController = async (req, res) => {
                     expiry,
                     provider
                 });
-
 
                 // also update thus part 
                 try {
@@ -271,6 +275,7 @@ const FileUploadController = async (req, res) => {
 const ReadFile = async (req, res) => {
     try {
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
+        const password = req.body.password
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
         const service = ProviderService
 
@@ -280,7 +285,7 @@ const ReadFile = async (req, res) => {
             return res.status(400).json({ message: 'Public id id required!' })
         }
 
-        const responce = await service.ReadFile(public_id, extention)
+        const responce = await service.ReadFile(public_id, extention, password)
         emitter.emit('fetch-file', { sign_url: responce })
         return res.status(200).json({
             message: 'File Fetch Succesfully!',
@@ -289,7 +294,11 @@ const ReadFile = async (req, res) => {
             }
         })
 
-    } catch (error) {
+    } catch (err) {
+
+        if (err.message === 'Incorrect password!') {
+            return res.status(403).json({ message: err.message })
+        }
         emitter.emit('upload-error', { err })
         return res.status(500).json({ message: 'Something went wrong, try again!' })
     }

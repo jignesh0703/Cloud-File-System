@@ -1,6 +1,7 @@
 import AWS from 'aws-sdk'
 import fs from 'fs'
 import path from 'path'
+import bcrypt from 'bcrypt'
 
 let s3
 
@@ -25,7 +26,7 @@ async function GetSign_url(filename, bucket, expiresIn = 3600) {
     return url
 }
 
-async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, bucket, clientSocketId) {
+async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, bucket, clientSocketId, hash) {
     try {
         if (io && clientSocketId) io.to(clientSocketId).emit('cloud-upload-progress', {
             percent: 60,
@@ -39,7 +40,10 @@ async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile,
             Bucket: bucket,
             Key: filename,
             Body: fileContext,
-            ACL: 'private'
+            ACL: 'private',
+            Metadata: {
+                passwordHash: hash
+            }
         }
 
         let fakePercent = 60;
@@ -79,8 +83,18 @@ async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile,
     }
 }
 
-async function Read_Aws(public_id, extention, bucket) {
+async function Read_Aws(public_id, extention, bucket, password) {
     try {
+        const head = await s3.headObject({
+            Bucket: bucket,
+            Key: public_id
+        }).promise()
+
+        const storehashpass = head.Metadata.passwordhash
+
+        const isMatch = await bcrypt.compare(password, storehashpass)
+        if (!isMatch) throw new Error('Incorrect password!')
+
         const Sign_url = await GetSign_url(public_id, bucket)
         return Sign_url
     } catch (error) {
