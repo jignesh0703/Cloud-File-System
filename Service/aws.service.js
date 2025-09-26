@@ -6,9 +6,9 @@ class AWSService {
         this.bucket = credentials?.bucket || process.env.AWS_BUCKET
     }
 
-    async fileUpload(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, clientSocketId, hash) {
+    async fileUpload(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, clientSocketId, hash, iv) {
         try {
-            const responce = await UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, this.bucket, clientSocketId, hash)
+            const responce = await UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, this.bucket, clientSocketId, hash, iv)
             return responce
         } catch (error) {
             throw error

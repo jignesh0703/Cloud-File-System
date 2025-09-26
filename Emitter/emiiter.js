@@ -74,4 +74,20 @@ emitter.on('restore-file', () => {
     console.log('Restore deleted file')
 })
 
+emitter.on('encrypt-start', () => {
+    console.log(`🔐 Encryption started`);
+});
+
+emitter.on('encrypt-finish', () => {
+    console.log(`✅ Encryption finished`);
+});
+
+emitter.on('decrypt-start', () => {
+    console.log(`🔓 Decryption started`);
+});
+
+emitter.on('decrypt-finish', () => {
+    console.log(`✅ Decryption finished`);
+});
+
 export default emitter

@@ -5,6 +5,8 @@ import CompressFile from '../Utils/compressfile.js';
 import axios from 'axios';
 import emitter from '../Emitter/emiiter.js';
 import bcrypt from 'bcrypt'
+import encryptFile from '../Utils/encryptfile.js';
+import DecrptFile from '../Utils/decrypt_file.js';
 
 const ALLOWED_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'avi'];
 const MAX_FILE_SIZE = 1024 * 1024 * 500
@@ -77,14 +79,20 @@ const FileUploadController = async (req, res) => {
                     clientSocketId
                 )
 
+                const encryptfile = await encryptFile(compressedFile, emitter)
+
+                const hash = await bcrypt.hash(password, 10)
+
                 const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
-                    compressedFile,
+                    encryptfile.encryptedFilePath,
                     io,
                     CompletedUploads,
                     sessionId,
                     totalFiles,
                     emitter,
-                    clientSocketId
+                    clientSocketId,
+                    hash,
+                    encryptfile.iv
                 );
 
                 function FormatBytes(bytes, decimals = 2) {
@@ -108,6 +116,7 @@ const FileUploadController = async (req, res) => {
                 // clean up
                 fs.unlinkSync(filepath)
                 if (compressedFile !== filepath) fs.unlinkSync(compressedFile)
+                if (fs.existsSync(encryptfile.encryptedFilePath)) fs.unlinkSync(encryptfile.encryptedFilePath)
 
                 if (clientSocketId) {
                     io.to(clientSocketId)?.emit('all-files-complete', { sessionId, data: CompletedUploads[sessionId] })
@@ -182,7 +191,7 @@ const FileUploadController = async (req, res) => {
                 const uploadDir = path.join('upload')
                 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
-                const finalpath = path.join(uploadDir, `${Date.now()} - ${filename}`) /// add UUID or timestramp
+                const finalpath = path.join(uploadDir, `${Date.now()} - ${filename}`)
 
                 await MergeChunks(
                     io,
@@ -206,17 +215,20 @@ const FileUploadController = async (req, res) => {
                     clientSocketId
                 )
 
+                const encryptfile = await encryptFile(CompressedFile, emitter)
+
                 const hash = await bcrypt.hash(password, 10)
 
-                const { sign_url, extention, size, public_id, expiry, provider } = await service.fileUpload(
-                    CompressedFile,
+                const { /*sign_url,*/ extention, size, public_id, expiry, provider } = await service.fileUpload(
+                    encryptfile.encryptedFilePath,
                     io,
                     CompletedUploads,
                     sessionId,
                     totalFiles,
                     emitter,
                     clientSocketId,
-                    hash
+                    hash,
+                    encryptfile.iv
                 );
 
                 function FormatBytes(bytes, decimals = 2) {
@@ -229,7 +241,7 @@ const FileUploadController = async (req, res) => {
 
                 CompletedUploads[sessionId].files.push({
                     filename,
-                    sign_url,
+                    // sign_url,
                     extention,
                     size: FormatBytes(size),
                     public_id,
@@ -242,6 +254,7 @@ const FileUploadController = async (req, res) => {
                     if (fs.existsSync(finalpath)) {
                         fs.unlinkSync(finalpath)
                     }
+                    if (fs.existsSync(encryptfile.encryptedFilePath)) fs.unlinkSync(encryptfile.encryptedFilePath)
                 } catch (err) {
                     console.warn('Could not delete file (maybe busy):', finalpath)
                 }
@@ -274,6 +287,7 @@ const FileUploadController = async (req, res) => {
 
 const ReadFile = async (req, res) => {
     try {
+        console.log('AAAA')
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
         const password = req.body.password
         const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
@@ -286,16 +300,25 @@ const ReadFile = async (req, res) => {
         }
 
         const responce = await service.ReadFile(public_id, extention, password)
-        emitter.emit('fetch-file', { sign_url: responce })
-        return res.status(200).json({
-            message: 'File Fetch Succesfully!',
-            data: {
-                sign_url: responce
-            }
-        })
+
+        const sign_url = responce.Sign_url
+        const iv = responce.iv
+        emitter.emit('fetch-file', { sign_url: sign_url })
+        const decryptedStream = await DecrptFile(sign_url, iv, emitter);
+
+        // set correct headers for video playback
+        res.setHeader("Content-Type", "video/mp4");
+        decryptedStream.pipe(res);
+
+        // return res.status(200).json({
+        //     message: 'File Fetch Succesfully!',
+        //     data: {
+        //         sign_url: responce
+        //     }
+        // })
 
     } catch (err) {
-
+        console.log(err)
         if (err.message === 'Incorrect password!') {
             return res.status(403).json({ message: err.message })
         }

@@ -1,0 +1,58 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Decrypted Video Test</title>
+</head>
+<body>
+  <h2>Decrypted Video Playback</h2>
+
+  <video width="640" height="360" controls>
+    <source src="http://localhost:5000/api/file/read?public_id=&extention=mp4&password=123&provider=aws" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Decrypted Video Test (POST)</title>
+</head>
+
+<body>
+  <h2>Video Playback via POST</h2>
+
+  <video id="player" width="640" height="360" controls></video>
+
+  <script>
+    async function loadVideo() {
+      const res = await fetch("http://localhost:5000/api/file/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          public_id: "1758866920865-file_1758866863499.mp4",
+          extention: "mp4",
+          password: "aaa",
+          provider: "aws"
+        })
+      });
+
+      if (!res.ok) {
+        alert("Failed to fetch video");
+        return;
+      }
+
+      const blob = await res.blob(); // convert response to Blob
+      const url = URL.createObjectURL(blob);
+      document.getElementById("player").src = url;
+    }
+
+    loadVideo();
+  </script>
+</body>
+
+</html>

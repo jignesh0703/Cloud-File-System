@@ -16,17 +16,35 @@ function initS3(credentials) {
     return s3
 }
 
+function getMimeType(ext) {
+    const map = {
+        mp4: 'video/mp4',
+        pdf: 'application/pdf',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        txt: 'text/plain',
+        csv: 'text/csv',
+        json: 'application/json'
+    };
+    return map[ext.toLowerCase()] || 'application/octet-stream';
+}
+
 async function GetSign_url(filename, bucket, expiresIn = 3600) {
+    const ext = filename.split('.').pop();
+    const contentType = getMimeType(ext);
     const params = {
         Bucket: bucket,
         Key: filename,
-        Expires: expiresIn
+        Expires: expiresIn,
+        ResponseContentDisposition: 'inline',
+        ResponseContentType: contentType
     }
     const url = s3.getSignedUrl('getObject', params)
     return url
 }
 
-async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, bucket, clientSocketId, hash) {
+async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, bucket, clientSocketId, hash, iv) {
     try {
         if (io && clientSocketId) io.to(clientSocketId).emit('cloud-upload-progress', {
             percent: 60,
@@ -36,13 +54,18 @@ async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile,
         const fileContext = fs.readFileSync(filepath)
         const filename = Date.now() + '-' + path.basename(filepath)
 
+        const ext = filename.split('.').pop();
+        const contentType = getMimeType(ext);
+
         const params = {
             Bucket: bucket,
             Key: filename,
             Body: fileContext,
             ACL: 'private',
+            ContentType: contentType,
             Metadata: {
-                passwordHash: hash
+                passwordHash: hash,
+                iv: iv
             }
         }
 
@@ -73,7 +96,7 @@ async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile,
         return {
             extention: filename.split('.').pop(),
             size: fileContext.length,
-            sign_url: await GetSign_url(filename, bucket),
+            // sign_url: await GetSign_url(filename, bucket),
             public_id: filename,
             expiry: "1h",
             provider: 'aws',
@@ -96,7 +119,7 @@ async function Read_Aws(public_id, extention, bucket, password) {
         if (!isMatch) throw new Error('Incorrect password!')
 
         const Sign_url = await GetSign_url(public_id, bucket)
-        return Sign_url
+        return { Sign_url, iv: head.Metadata.iv }
     } catch (error) {
         throw error
     }

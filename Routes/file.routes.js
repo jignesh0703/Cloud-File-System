@@ -5,7 +5,7 @@ import { Upload } from '../middelware/multer.js'
 const FileRoutes = express.Router()
 
 FileRoutes.post('/upload', Upload.array('chunk', 5), FileUploadController)
-FileRoutes.get('/read', ReadFile)
+FileRoutes.post('/read', ReadFile)
 FileRoutes.delete('/delete', DeleteFile)
 FileRoutes.get('/fetchdeletedfile', FetchAllDeletedFileController)
 FileRoutes.post('/restoredeletefile', RestoreDeletedFileController)
