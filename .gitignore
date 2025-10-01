@@ -1,0 +1,7 @@
+node_modules
+txt
+.env
+package.json
+package-lock.json
+temp
+upload
