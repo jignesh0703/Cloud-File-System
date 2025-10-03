@@ -7,17 +7,18 @@ import emitter from '../Emitter/emiiter.js';
 import bcrypt from 'bcrypt'
 import encryptFile from '../Utils/encryptfile.js';
 import DecrptFile from '../Utils/decrypt_file.js';
-import getCloudService from '../Service/get_cloud_provider.js';
 
 const ALLOWED_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'avi'];
 const MAX_FILE_SIZE = 1024 * 1024 * 500
 let CompletedUploads = {}
 
 const FileUploadController = async (req, res) => {
+    let uploadedFiles = []
     try {
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
         const totalFiles = parseInt(req.body.totalFiles) || 1;
-        const service = getCloudService(provider)
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
         const password = req.body.password
 
         emitter.emit('start', { provider })
@@ -47,6 +48,7 @@ const FileUploadController = async (req, res) => {
             const filename = `file_${Date.now()}${path.extname(fileUrl).split('?')[0]}`
             const filepath = path.join('upload', filename)
             fs.mkdirSync(path.dirname(filepath), { recursive: true })
+            uploadedFiles.push(filepath)
 
             const socketProgress = () => {
                 io.to(clientSocketId)?.emit('chunk-upload', {
@@ -78,8 +80,10 @@ const FileUploadController = async (req, res) => {
                     emitter,
                     clientSocketId
                 )
+                uploadedFiles.push(compressedFile)
 
                 const encryptfile = await encryptFile(compressedFile, emitter)
+                uploadedFiles.push(encryptfile.encryptedFilePath)
 
                 const hash = await bcrypt.hash(password, 10)
 
@@ -128,6 +132,16 @@ const FileUploadController = async (req, res) => {
                 })
 
             } catch (err) {
+                for (const filePath of uploadedFiles) {
+                    try {
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                            console.log(`Deleted: ${filePath}`);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to delete file:', filePath, e.message);
+                    }
+                }
                 emitter.emit('upload-error', { err })
                 return res.status(500).json({ message: "Failed to upload file from URL", error: err })
             }
@@ -192,6 +206,7 @@ const FileUploadController = async (req, res) => {
                 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
                 const finalpath = path.join(uploadDir, `${Date.now()} - ${filename}`)
+                uploadedFiles.push(finalpath)
 
                 await MergeChunks(
                     io,
@@ -214,8 +229,10 @@ const FileUploadController = async (req, res) => {
                     emitter,
                     clientSocketId
                 )
+                uploadedFiles.push(CompressedFile)
 
                 const encryptfile = await encryptFile(CompressedFile, emitter)
+                uploadedFiles.push(encryptfile.encryptedFilePath)
 
                 const hash = await bcrypt.hash(password, 10)
 
@@ -280,6 +297,17 @@ const FileUploadController = async (req, res) => {
         return res.status(200).json({ message: `Chunk uploaded` })
 
     } catch (err) {
+        console.log(`Files ${uploadedFiles}`)
+        for (const filePath of uploadedFiles) {
+            try {
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    console.log(`Deleted: ${filePath}`);
+                }
+            } catch (e) {
+                console.warn('Failed to delete file:', filePath, e.message);
+            }
+        }
         emitter.emit('upload-error', { err })
         return res.status(500).json({ message: 'Something went wrong, try again!' })
     }
@@ -289,7 +317,8 @@ const ReadFile = async (req, res) => {
     try {
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
         const password = req.body.password
-        const service = getCloudService(provider)
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
 
         const extention = req.body.extention
         const public_id = req.body.public_id
@@ -328,7 +357,8 @@ const ReadFile = async (req, res) => {
 const DeleteFile = async (req, res) => {
     try {
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
-        const service = getCloudService(provider)
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
 
         const public_id = req.body.public_id
         if (!public_id) {
@@ -353,7 +383,8 @@ const DeleteFile = async (req, res) => {
 const FetchAllDeletedFileController = async (req, res) => {
     try {
         const provider = req.body.provider || process.env.CLOUD_PROVIDER
-        const service = getCloudService(provider)
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
 
         const responce = await service.FetchAllDeletedFiles()
         emitter.emit('fetch-deleted-file')
@@ -374,7 +405,8 @@ const FetchAllDeletedFileController = async (req, res) => {
 const RestoreDeletedFileController = async (req, res) => {
     try {
         const provider = req.body.provider
-        const service = getCloudService(provider)
+        const { default: ProviderService } = await import(`../Service/${provider}.service.js`)
+        const service = ProviderService
 
         const { public_id, versionid } = req.body
 

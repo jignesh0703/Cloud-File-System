@@ -4,7 +4,7 @@ import dotenv from 'dotenv'
 import cloud_service from './cloud_service.js';
 dotenv.config()
 
-export class Cloudanary extends cloud_service{
+ class Cloudanary extends cloud_service{
     constructor(credentials) {
         super();
         cloudinary.config({
@@ -48,3 +48,5 @@ export class Cloudanary extends cloud_service{
         }
     }
 }
+
+export default new Cloudanary()

@@ -4,9 +4,7 @@ import path from 'path'
 import fs from 'fs'
 dotenv.config()
 
-console.log(process.env.ENCRYPTION_KEY)
 const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex')
-console.log('KEY', key)
 
 const encryptFile = async (finalpath, emitter) => {
     emitter.emit('encrypt-start')

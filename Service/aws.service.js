@@ -1,7 +1,7 @@
 import { Delete_AWS, FetchAllDeletedFile, initS3, Read_Aws, UploadToAWS, RestoreDeletedFile } from '../Clouds/aws.js';
 import Cloud_Service from './cloud_service.js';
 
-export class AWSService extends Cloud_Service {
+class AWSService extends Cloud_Service {
     constructor(credentials) {
         super();
         this.s3 = initS3(credentials)
@@ -53,3 +53,5 @@ export class AWSService extends Cloud_Service {
         }
     }
 }
+
+export default new AWSService()

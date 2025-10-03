@@ -4,6 +4,7 @@ import FileRoutes from './Routes/file.routes.js'
 import cors from 'cors'
 import { Server } from 'socket.io'
 import http from 'http'
+import helmetmiddelware from './helmet/helmet.js'
 dotenv.config()
 
 const app = express()
@@ -19,6 +20,9 @@ const io = new Server(server, {
         methods: ["GET", "POST", "DELETE"]
     }
 });
+
+app.disable('x-powered-by')
+app.use(helmetmiddelware())
 
 app.set('io', io)
 app.use(cors())

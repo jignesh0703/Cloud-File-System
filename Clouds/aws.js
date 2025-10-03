@@ -45,6 +45,7 @@ async function GetSign_url(filename, bucket, expiresIn = 3600) {
 }
 
 async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile, emitter, bucket, clientSocketId, hash, iv) {
+    let interval;
     try {
         if (io && clientSocketId) io.to(clientSocketId).emit('cloud-upload-progress', {
             percent: 60,
@@ -70,7 +71,6 @@ async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile,
         }
 
         let fakePercent = 60;
-        let interval;
         if (io && clientSocketId) {
             interval = setInterval(() => {
                 fakePercent += Math.random() * 2;
@@ -102,6 +102,7 @@ async function UploadToAWS(filepath, io, CompletedUploads, sessionId, TotalFile,
             provider: 'aws',
         };
     } catch (error) {
+        if (interval) clearInterval(interval);
         throw error
     }
 }
